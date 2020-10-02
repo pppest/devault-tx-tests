@@ -15,6 +15,8 @@ Tx tests for devaultcore
  notice that bash doesnt like float so only whole int amounts are sent.   
  so the total amount of inputs must be large enough to cover atleast 1 dvt+fee pr output.   
  fee set in configuration is added to amount when send to send_address.   
+ can give balance when sendind if input txs hasnt been confirmed so dont set wait time too low.   
+   
    
  logs output to: dvt-tests-DATE-TIME.log   
    
