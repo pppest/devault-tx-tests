@@ -4,6 +4,8 @@ Tx tests for devaultcore
  DeVault wallet tx tests script by pest   
    
  the script requires a address with lots of devault to start with.   
+ for testnet2 you can start with this:    
+ "peace loyal duck burden climb bright hint little ribbon near depth stick"   
  it then uses this address to   
  sends num_inputs to a new address in a new wallet and then   
  send amount*num_inputs/num_outputs to num_outputs addresses.      
