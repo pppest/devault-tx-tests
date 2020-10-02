@@ -26,11 +26,13 @@ clear
 testnet_name=testnet2
 amount=600
 fee=2
-num_inputs=15
-num_outputs=15
+num_inputs=5
+num_outputs=7
 
 num_gen_blocks=10 # blocks generated after sending to send_address
 wait_for_gen=10  # number of secs to wait for each block generated after sending to send_address
+
+testnet2_wallet='"peace loyal duck burden climb bright hint little ribbon near depth stick"'
 
 echo -e '
 \033[33;9m
@@ -60,18 +62,20 @@ echo -e "DEVAULT TX TESTING\n"
 echo -e "\n\n\nDeVault wallet transaction test script\n" > $logfile
 echo -e "amount: $amount\nfee: $fee\nnum_inputs: $num_inputs\nnum_outputs: $num_outputs\n" >> $logfile
 
-#start daemon
-echo -e "\nStarting daemon in from this dir" >> $logfile
-./devaultd -testnet -daemon -bypasspassword #>> $logfile
-sleep 2 #give daemon time to start
-
 #first run check
 FILE=~/.devault/$testnet_name/wallets/receiving_wallet.dat
 if ! test -f "$FILE";
   then
-    echo "first run, creating receiving_wallet.dat";
+    echo "first run, creating base wallet and receiving_wallet.dat";
+    #start daemon and create base wallet
+    echo -e "\nStarting daemon in from this dir" >> $logfile
+    ./devaultd -testnet -daemon -bypasspassword #-seedphrase=$testnet2_wallet
+    sleep 2 #give daemon time to start
     ./devault-cli -testnet createwallet receiving_wallet.dat; >> $logfile
   else
+    # start daemon
+    ./devaultd -testnet -daemon -bypasspassword #>> $logfile
+    sleep 2 #give daemon time to start
     echo loading receiving_wallet.dat
     ./devault-cli -testnet loadwallet receiving_wallet.dat >> $logfile
 fi
@@ -93,9 +97,10 @@ echo $UNSPENT | jq ".[].txid" >> $logfile
 echo -e "\n       ------------" >> $logfile
 
 #main loop
-x=1 # TX counter
+x=0 # TX counter
 for ((i=1; i<=$num_inputs; i++))
   do
+    x=$((x+1))
     for o in $(seq 1 $num_outputs);
       do
         echo Test \#$x: TX with $i inputs and $o outputs
@@ -161,7 +166,6 @@ for ((i=1; i<=$num_inputs; i++))
         ./devault-cli -testnet -rpcwallet=wallet.dat generate 1  >/dev/null
       done;
     done;
-    x=$((x+1))
 done;
 
     echo -e "\n       ------------"
