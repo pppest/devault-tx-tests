@@ -100,9 +100,9 @@ echo -e "\n       ------------" >> $logfile
 x=0 # TX counter
 for ((i=1; i<=$num_inputs; i++))
   do
-    x=$((x+1))
     for o in $(seq 1 $num_outputs);
       do
+        x=$((x+1))
         echo Test \#$x: TX with $i inputs and $o outputs
 
         # for $o outputs make list of $i inputs and send tx
