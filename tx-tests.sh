@@ -21,16 +21,20 @@
 # pest
 
 clear
-
 # Configuration
+inputs_from=$1
+inputs_to=$2
+outsputs_from=$3
+outputs_to=$4
+git_branch=$5
 testnet_name=testnet2
-amount=600
+amount=4
 fee=2
-num_inputs=5
-num_outputs=7
+num_inputs=2
+num_outputs=2
 
 num_gen_blocks=10 # blocks generated after sending to send_address
-wait_for_gen=10  # number of secs to wait for each block generated after sending to send_address
+wait_for_gen=1  # number of secs to wait for each block generated after sending to send_address
 
 testnet2_wallet='"peace loyal duck burden climb bright hint little ribbon near depth stick"'
 
@@ -53,6 +57,19 @@ ______________________ ____________________
 \033[0m
 '
 
+#check if git_branch is set
+#if [ -z "$git_branch" ];
+#  then
+#    git clone -b $git_branch https://github.com/devaultcrypto/devault
+#    mkdir build
+#    cd build
+#    cmake ../devault .
+#    make -j24
+#    cd ..
+#    cp build/devaultd .
+#    cp build/devault-cli .
+#    rm -r devault
+#fi
 
 #start daemon and initiate log file
 now=$(date +"%Y-%m-%d-%H:%M:%S")
@@ -86,12 +103,12 @@ echo balance: >> $logfile
 ./devault-cli -testnet -rpcwallet=wallet.dat getbalance >> $logfile
 
 #get UNSPENT UTXO
-echo "listUNSPENT" >> $logfile
-UNSPENT=$(./devault-cli -testnet -rpcwallet=wallet.dat listunspent)
-echo -e "\nUNSPENTs" >> $logfile
-NUM_UTXO=$(echo $UNSPENT | jq '. | length')
-echo "number of UTXO: $NUM_UTXO" >> $logfile
-echo $UNSPENT | jq ".[].txid" >> $logfile
+#echo "listUNSPENT" >> $logfile
+#UNSPENT=$(./devault-cli -testnet -rpcwallet=wallet.dat listunspent)
+#echo -e "\nUNSPENTs" >> $logfile
+#NUM_UTXO=$(echo $UNSPENT | jq '. | length')
+#echo "number of UTXO: $NUM_UTXO" >> $logfile
+#echo $UNSPENT | jq ".[].txid" >> $logfile
 
 
 echo -e "\n       ------------" >> $logfile
@@ -119,23 +136,29 @@ for ((i=1; i<=$num_inputs; i++))
         # send amount of inputs to send_address
         for ii in $(seq 1 $i);
         do
-          amount_W_fee=$(($amount+$fee))
-          send_string="./devault-cli -testnet -rpcwallet=wallet.dat sendtoaddress $send_address $amount_W_fee"
-          echo $send_string >> $logfile
-          $send_string > /dev/null
+          amount_w_fee=$((($amount+$fee)*$o/$i))
+          send_string="./devault-cli -testnet -rpcwallet=wallet.dat sendtoaddress $send_address $amount_w_fee"
+          echo $send_string #>> $logfile
+          $send_string #> /dev/null
         done;
 
+        is_spendable=""
         # generate blocks to make tx spendable
-        for b in $(seq 1 $num_gen_blocks);
+        until [ "${is_spendable: -4}" = "true" ];
         do
-          sleep $wait_for_gen
           ./devault-cli -testnet -rpcwallet=wallet.dat generate 1  > /dev/null
+          sleep $wait_for_gen
+          #check if spendable
+          unspent=$(./devault-cli -testnet -rpcwallet=$send_wallet listunspent)
+          echo $unspent >> $logfile
+          is_spendable=$( echo $unspent | jq ".[].spendable" )
+          echo $is_spendable >> $logfile
         done;
 
         # outputs balance and wallet info to see if spendable
-        echo send_wallet balance >> $logfile
-        ./devault-cli -testnet -rpcwallet=$send_wallet  getbalance  >> $logfile
-        ./devault-cli -testnet -rpcwallet=$send_wallet  listunspent >> $logfile
+        echo send_wallet balance #>> $logfil
+        ./devault-cli -testnet -rpcwallet=$send_wallet  getbalance  #>> $logfile
+        ./devault-cli -testnet -rpcwallet=$send_wallet  listunspent #>> $logfile
 
         # make list of output addresses needed
         outputs=""
@@ -147,7 +170,7 @@ for ((i=1; i<=$num_inputs; i++))
             output_address_string='./devault-cli -testnet -rpcwallet=receiving_wallet.dat getnewaddress'
             output_address=$(eval $output_address_string)
             echo outputs_address is  $output_address >> $logfile
-            outputs+='\"'$output_address'\":'$send_amount','
+            outputs+='\"'$output_address'\":'$amount','
         done;
         outputs='"{'${outputs::-1}'}"';
 
@@ -156,8 +179,8 @@ for ((i=1; i<=$num_inputs; i++))
         sendmany_string+=$send_wallet
         sendmany_string+=' sendmany "" '
         sendmany_string+=$outputs
-        echo $sendmany_string >> $logfile
-        eval $sendmany_string >> $logfile
+        echo $sendmany_string #>> $logfile
+        eval $sendmany_string #>> $logfile
 
       # generate blocks to make tx spendable
       for b in $(seq 1 $num_gen_blocks);
