@@ -12,7 +12,9 @@ for each test it ill create a new wallet and populate it with utxo for
 for the inputs and then send the outputs to new addresses in receiving_wallet   
 the number of inputs and outputs, the amount send in each output and other seetings   
 can be set in the configuration in the top of the file   
-   
+
+it ill use devaultd and devault-cli from the local dir if you call the script without branch and build flags options. 
+
  let me know if you prefer to set the configuration as commandline options   
 
  logs output to: dvt-tests-DATE-TIME.log   
