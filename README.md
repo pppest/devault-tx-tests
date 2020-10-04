@@ -3,7 +3,7 @@ Tx tests for devaultcore
 
 DeVault wallet tx tests bash script by pest   
 
-USAGE: ./tx-tests.sh git_branch build_flags   
+USAGE: ./tx-tests.sh git_branch cmake_build_flags   
 
 will clone and build devault core from git_branch with build_flags   
 then populate the wallet with the needed utxo and make a receiving wallet.   
