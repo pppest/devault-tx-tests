@@ -33,11 +33,11 @@ testnet2_wallet='"peace loyal duck burden climb bright hint little ribbon near d
 amount=11
 fee=5
 num_inputs=2
-num_outputs=1
+num_outputs=3
 wait_for_gen=1  # number of secs to wait for each block generated after sending to send_address
 
 # stress tests
-num_of_stress_txs=10        # num of how many txs pr stress test
+num_of_stress_txs=100      # num of how many txs pr stress test
 num_of_stress_tests=1  # stress test is done this many times
 amount_stress=10
 
@@ -98,9 +98,9 @@ num_utxo="0"
 echo -ne "Checking if enough utxo in base wallet...\033[0K\r"
 until [ $num_utxo -gt $num_of_utxo_needed ]
   do
-    echo -ne "utxo in base wallet: $num_utxo, utxo needed: $num_of_utxo_needed\033[0K\r"
     unspent=$(./devault-cli -testnet -rpcwallet=wallet.dat listunspent)
     num_utxo=$(echo $unspent | jq '. | length')
+    echo -ne "utxo in base wallet: $num_utxo, utxo needed: $num_of_utxo_needed\033[0K\r"
     ./devault-cli -testnet -rpcwallet=wallet.dat generate 100 > /dev/null
     sleep 1
   done;
@@ -236,14 +236,11 @@ do
 
 # empty receiving_wallet, stop, cleanup and end script
 receiving_wallet_balance=$(./devault-cli -testnet -rpcwallet=receiving_wallet.dat getbalance)
-#echo $receiving_wallet_balance
 receiving_wallet_balance=${receiving_wallet_balance%.*}
-echo $receiving_wallet_balance
 receiving_wallet_balance=$(($receiving_wallet_balance-$fee))
-echo $receiving_wallet_balance
 base_wallet_address=$(./devault-cli -testnet -rpcwallet=wallet.dat getnewaddress)
 send_string="./devault-cli -testnet -rpcwallet=receiving_wallet.dat sendtoaddress $base_wallet_address $receiving_wallet_balance "" "" true"
-$send_string
+$send_string >> $logfile
 
 echo -en "Stop daemon\033[0K\r"
 ./devault-cli -testnet stop >> $logfile
