@@ -162,7 +162,7 @@ for ((i=1; i<=$num_inputs; i++))
         for ii in $(seq 1 $i);
         do
           echo $amount \+ $fee \*$o \/$i = >> $logfile
-          amount_input=$(( ($amount+$fee)*$o/$i ))
+          amount_input=$(( ( ($amount+$fee)*$o/$i ) + 1))
           echo $amount_input >> $logfile
           send_string="./devault-cli -regtest -rpcwallet=wallet.dat sendtoaddress $send_address $amount_input"
           echo $send_string >> $logfile
