@@ -31,15 +31,49 @@ testnet2_wallet='"peace loyal duck burden climb bright hint little ribbon near d
 # input/output tests
 amount=11
 fee=5
-num_inputs=3
-num_outputs=4
+num_inputs=1
+num_outputs=1
 wait_for_gen=1  # number of secs to wait for each block generated after sending to send_address
 
 # stress tests
-num_of_stress_txs=100      # num of how many txs pr stress test
+num_of_stress_txs=10      # num of how many txs pr stress test
 num_of_stress_tests=1  # stress test is done this many times
 amount_stress=10
 
+#start daemon and initiate log file
+now=$(date +"%Y-%m-%d-%H:%M:%S")
+logfile=dvt-tests-$now.log
+echo -e "\n\n\nDeVault wallet transaction test script\n" > $logfile
+echo -e "DEVAULT TX TESTING\n"
+# print Configuration
+#check if git_branch is set
+if [ -z "$git_branch" ];
+  then
+    echo -ne "git branch empty not building wallet\033[0K\r"
+  else
+    if ! test -f "devaultd"; then
+      echo -ne "devaultd doesnt exist will build.\033[0K\r"
+      git clone -b $git_branch https://github.com/devaultcrypto/devault >> $logfile
+      mkdir build
+      cd build
+      cmake -DBUILD_QT=0 -Wno-dev ../devault . #>> $logfile
+      make  -s -j4 #>> $logfile
+      cd ..
+      echo -ne "copying devaultd and devault-cli\033[0K\r"
+      cp build/devaultd .
+      cp build/devault-cli .
+      rm -rf devault build
+      sleep 0.2
+    fi;
+    echo -ne "devaultd exists will not build\033[0K\r"
+fi;
+
+if ! test -f "devaultd";
+  then
+    echo -ne "devaultd not found\033[0K\r"
+    exit
+fi;
+clear
 echo -e '
 \033[33;9m
 
@@ -58,33 +92,6 @@ ______________________ ____________________
    by     p e s t
 \033[0m
 '
-#start daemon and initiate log file
-now=$(date +"%Y-%m-%d-%H:%M:%S")
-logfile=dvt-tests-$now.log
-echo -e "\n\n\nDeVault wallet transaction test script\n" > $logfile
-echo -e "DEVAULT TX TESTING\n"
-# print Configuration
-#check if git_branch is set
-if [ -z "$git_branch" ];
-  then
-    echo -ne "git branch empty not building wallet\033[0K\r"
-  else
-    if ! test -f "devaultd"; then
-      echo -ne "devaultd doesnt exist will build.\033[0K\r"
-      git clone -b $git_branch https://github.com/devaultcrypto/devault >> $logfile
-      mkdir build
-      cd build
-      cmake -DBUILD_QT=0 -Wno-dev ../devault . >> $logfile
-      make  -s -j4 >> $logfile
-      cd ..
-      echo -ne "copying devaultd and devault-cli\033[0K\r"
-      cp build/devaultd .
-      cp build/devault-cli .
-      rm -rf devault build
-      sleep 0.2
-    fi;
-    echo -ne "devaultd exists will not build\033[0K\r"
-fi;
 
 echo -e "\n\n\nDeVault wallet transaction test script\n" > $logfile
 echo -e "amount: $amount\nfee: $fee\nnum_inputs: $num_inputs" >> $logfile
