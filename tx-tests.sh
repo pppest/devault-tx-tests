@@ -25,15 +25,14 @@ clear
 # Configuration
 # main configuration
 git_branch=$1
-build_flags=$2
 testnet_name=testnet2
 testnet2_wallet='"peace loyal duck burden climb bright hint little ribbon near depth stick"'
 
 # input/output tests
 amount=11
 fee=5
-num_inputs=2
-num_outputs=3
+num_inputs=3
+num_outputs=4
 wait_for_gen=1  # number of secs to wait for each block generated after sending to send_address
 
 # stress tests
@@ -62,6 +61,7 @@ ______________________ ____________________
 #start daemon and initiate log file
 now=$(date +"%Y-%m-%d-%H:%M:%S")
 logfile=dvt-tests-$now.log
+echo -e "\n\n\nDeVault wallet transaction test script\n" > $logfile
 echo -e "DEVAULT TX TESTING\n"
 # print Configuration
 #check if git_branch is set
@@ -70,24 +70,26 @@ if [ -z "$git_branch" ];
     echo -ne "git branch empty not building wallet\033[0K\r"
   else
     if ! test -f "devaultd"; then
-      echo -ne "devaultd doesnt exist will build\033[0K\r"
+      echo -ne "devaultd doesnt exist will build.\033[0K\r"
       git clone -b $git_branch https://github.com/devaultcrypto/devault >> $logfile
       mkdir build
       cd build
-      cmake $build_flags ../devault . >> $logfile
-      make -j24 >> $logfile
+      cmake -DBUILD_QT=0 -Wno-dev ../devault . >> $logfile
+      make  -s -j4 >> $logfile
       cd ..
+      echo -ne "copying devaultd and devault-cli\033[0K\r"
       cp build/devaultd .
       cp build/devault-cli .
-      rm -r devault
+      rm -rf devault build
+      sleep 0.2
     fi;
     echo -ne "devaultd exists will not build\033[0K\r"
 fi;
 
 echo -e "\n\n\nDeVault wallet transaction test script\n" > $logfile
 echo -e "amount: $amount\nfee: $fee\nnum_inputs: $num_inputs" >> $logfile
-echo -e "\nnum_outputs: $num_outputs \nnum_of_stress_tests $num_of_stress_tests\n" >> $logfile
-echo -e "\nnum_of_stress_tx $num_of_stress_txs\namount_stress $amount_stress" >> $logfile
+echo -e "num_outputs: $num_outputs \nnum_of_stress_tests $num_of_stress_tests" >> $logfile
+echo -e "num_of_stress_tx $num_of_stress_txs\namount_stress $amount_stress\n" >> $logfile
 
 ./devaultd -testnet -daemon -bypasspassword >> $logfile
 sleep 2 #give daemon time to start
@@ -121,12 +123,11 @@ echo balance: >> $logfile
 
 #get UNSPENT UTXO
 #echo "listUNSPENT" >> $logfile
-#UNSPENT=$(./devault-cli -testnet -rpcwallet=wallet.dat listunspent)
+UNSPENT=$(./devault-cli -testnet -rpcwallet=wallet.dat listunspent)
 #echo -e "\nUNSPENTs" >> $logfile
-#NUM_UTXO=$(echo $UNSPENT | jq '. | length')
-#echo "number of UTXO: $NUM_UTXO" >> $logfile
+NUM_UTXO=$(echo $UNSPENT | jq '. | length')
+echo "number of UTXO: $NUM_UTXO" >> $logfile
 #echo $UNSPENT | jq ".[].txid" >> $logfile
-
 
 echo -e "\n       ------------" >> $logfile
 
@@ -169,9 +170,7 @@ for ((i=1; i<=$num_inputs; i++))
           sleep $wait_for_gen
           #check if spendable
           unspent=$(./devault-cli -testnet -rpcwallet=$send_wallet listunspent)
-          echo $unspent >> $logfile
           is_spendable=$( echo $unspent | jq ".[].spendable" )
-          echo $is_spendable >> $logfile
         done;
 
         # outputs balance and wallet info to see if spendable
@@ -193,23 +192,35 @@ for ((i=1; i<=$num_inputs; i++))
         outputs='"{'${outputs::-1}'}"';
 
         # load send_wallet and sendmany to $o outputs
-        sendmany_string='./devault-cli -testnet -rpcwallet='
-        sendmany_string+=$send_wallet
-        sendmany_string+=' sendmany "" '
-        sendmany_string+=$outputs
+        sendmany_string='./devault-cli -testnet -rpcwallet='$send_wallet' sendmany "" '$outputs
         echo $sendmany_string >> $logfile
-        eval $sendmany_string >> $logfile
+        tx=$( eval $sendmany_string )
 
       # generate blocks to make tx spendable
-      for b in $(seq 1 $num_gen_blocks);
-      do
-        sleep $wait_for_gen
-        ./devault-cli -testnet -rpcwallet=wallet.dat generate 1  >/dev/null
-      done;
+      until [ "${is_spendable: -4}" = "true" ];
+        do
+          ./devault-cli -testnet -rpcwallet=wallet.dat generate 1  > /dev/null
+          sleep $wait_for_gen
+          #check if spendable
+          unspent=$(./devault-cli -testnet -rpcwallet=$send_wallet listunspent)
+          is_spendable=$( echo $unspent | jq ".[].spendable" )
+        done;
+
+        # output tx info
+        tx_info=$(eval './devault-cli -testnet -rpcwallet=receiving_wallet.dat gettransaction '$tx)
+        hex=$(echo $tx_info | jq ".hex")
+        tx_info=$(eval './devault-cli -testnet decoderawtransaction '$hex)
+        echo hex: $hex >> $logfile
+#        num_vin=$(echo $tx_info | jq '.vin | length')
+#        num_vout=$(echo $tx_info | jq '.vout | length')
+#        echo -e "\nvin $num_vin i $i vout $num_vout o $o\n"
     done;
 done;
 
+echo -e "\n       ------------" >> $logfile
+
 # stress tests. send a lot of tx
+echo Stress tests >> $logfile
 for i in $(seq 1 $num_of_stress_tests);
 do
   x=$((x+1))
@@ -217,8 +228,8 @@ do
   for i in $(seq 1 $num_of_stress_txs);
     do
       send_string="./devault-cli -testnet -rpcwallet=wallet.dat sendtoaddress $send_address $amount_stress"
-      echo $send_string >> $logfile
-      $send_string  >> $logfile
+      #echo $send_string >> $logfile
+      #$send_string  >> $logfile
   done;
     until [ "${is_spendable: -4}" = "true" ];
     do
@@ -231,8 +242,8 @@ do
       echo $is_spendable >> $logfile
     done;
   done;
+  echo -e "\n       ------------" >> $logfile
 
-    echo -e "\n       ------------" >> $logfile
 
 # empty receiving_wallet, stop, cleanup and end script
 receiving_wallet_balance=$(./devault-cli -testnet -rpcwallet=receiving_wallet.dat getbalance)
