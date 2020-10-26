@@ -25,25 +25,28 @@ clear
 # Configuration
 # main configuration
 git_branch=$1
-testnet_name=regtest
-testnet2_wallet='"peace loyal duck burden climb bright hint little ribbon near depth stick"'
+build_qt=1
+build_cores=8
+testnet_dir_name=testnet2        # dirname in .devault
+testnet_cli_flag=testnet        # command line option for devault-cli
 
 # input/output tests
 amount=33
 fee=5
-num_inputs=15
-num_outputs=15
-wait_for_gen=0.3  # number of secs to wait for each block generated after sending to send_address
+num_inputs=3
+num_outputs=5
+wait_for_gen=1  # number of secs to wait for each block generated after sending to send_address
 
 # stress tests
-num_of_stress_txs=1000      # num of how many txs pr stress test
+num_of_stress_txs=100      # num of how many txs pr stress test
 num_of_stress_tests=10  # stress test is done this many times
 amount_stress=10
 
 #start daemon and initiate log file
 now=$(date +"%Y-%m-%d-%H:%M:%S")
 logfile=dvt-tests-$now.log
-echo -e "\n\n\nDeVault wallet transaction test script\n" > $logfile
+printtoconsole_logfile=dvt-tests-$now-printtoconsole.log
+
 echo -e "DEVAULT TX TESTING\n"
 # print Configuration
 #check if git_branch is set
@@ -53,15 +56,16 @@ if [ -z "$git_branch" ];
   else
     if ! test -f "devaultd"; then
       echo -ne "devaultd doesnt exist will build.\033[0K\r"
-      git clone -b $git_branch https://github.com/devaultcrypto/devault >> $logfile
+      git clone -b $git_branch https://github.com/devaultcrypto/devault
       mkdir build
       cd build
-      cmake -DBUILD_QT=0 -Wno-dev ../devault . #>> $logfile
-      make  -s -j8 #>> $logfile
+      cmake -DBUILD_QT=$build_qt -Wno-dev ../devault . #>> $logfile
+      make  -s -j$build_cores #>> $logfile
       cd ..
       echo -ne "copying devaultd and devault-cli\033[0K\r"
       cp build/devaultd .
       cp build/devault-cli .
+      cp build/devault-qt .
       rm -rf devault build
       sleep 1
     fi;
@@ -94,43 +98,48 @@ ______________________ ____________________
 '
 
 echo -e "\n\n\nDeVault wallet transaction test script\n" > $logfile
+echo -e "Testnet: $testnet_dir_name" >> $logfile
 echo -e "amount: $amount\nfee: $fee\nnum_inputs: $num_inputs" >> $logfile
 echo -e "num_outputs: $num_outputs \nnum_of_stress_tests $num_of_stress_tests" >> $logfile
 echo -e "num_of_stress_tx $num_of_stress_txs\namount_stress $amount_stress\n" >> $logfile
 
-./devaultd -regtest -daemon -bypasspassword >> $logfile
-sleep 2 #give daemon time to start
+echo -ne "starting daemon...\033[0K\r"
+./devaultd -$testnet_cli_flag -daemon -bypasspassword -printtoconsole > $printtoconsole_logfile
+sleep 3 # give daemon time to start
+echo -ne "daemon started!\033[0K\r"
 
 # generate inputs for tests
 num_of_utxo_needed=$(($num_inputs*$num_outputs+$num_of_stress_txs*$num_of_stress_tests))
 num_utxo="0"
+
 echo -ne "Checking if enough utxo in base wallet...\033[0K\r"
-until (( $num_utxo >= $num_of_utxo_needed ))
+until (( $num_utxo > $num_of_utxo_needed ))
   do
-    unspent=$(./devault-cli -regtest -rpcwallet=wallet.dat listunspent)
+    unspent=$(./devault-cli -$testnet_cli_flag -rpcwallet=wallet.dat listunspent)
     num_utxo=$(echo $unspent | jq '. | length')
     echo -ne "utxo in base wallet: $num_utxo, utxo needed: $num_of_utxo_needed\033[0K\r"
-    ./devault-cli -regtest -rpcwallet=wallet.dat generate 100 > /dev/null
-    #sleep $wait_for_gen
+    ./devault-cli -$testnet_cli_flag -rpcwallet=wallet.dat generate 100 > /dev/null
+    sleep $wait_for_gen
   done;
 
  #generate receiving_wallet if it doesnt exist
-if  [[ ! -f '/home/'$USER'/.devault/'$testnet_name'/wallets/receiving_wallet.dat' ]]
+if  [[ ! -f '/home/'$USER'/.devault/'$testnet_dir_name'/wallets/receiving_wallet.dat' ]]
   then
     echo -ne "creating receiving_wallet\033[0K\r"
-    ./devault-cli -regtest createwallet receiving_wallet.dat >> $logfile
+    ./devault-cli -$testnet_cli_flag createwallet receiving_wallet.dat >> $logfile
+  else
+    ./devault-cli -$testnet_cli_flag loadwallet receiving_wallet.dat >> $logfile
 fi;
-./devault-cli -regtest loadwallet receiving_wallet.dat >> $logfile
 
 
 # add basic info to log file
-./devault-cli -regtest -rpcwallet=wallet.dat getinfo >> $logfile
+./devault-cli -$testnet_cli_flag -rpcwallet=wallet.dat getinfo >> $logfile
 echo balance: >> $logfile
-./devault-cli -regtest -rpcwallet=wallet.dat getbalance >> $logfile
+./devault-cli -$testnet_cli_flag -rpcwallet=wallet.dat getbalance >> $logfile
 
 #get UNSPENT UTXO
 #echo "listUNSPENT" >> $logfile
-UNSPENT=$(./devault-cli -regtest -rpcwallet=wallet.dat listunspent)
+UNSPENT=$(./devault-cli -$testnet_cli_flag -rpcwallet=wallet.dat listunspent)
 #echo -e "\nUNSPENTs" >> $logfile
 NUM_UTXO=$(echo $UNSPENT | jq '. | length')
 echo "number of UTXO: $NUM_UTXO" >> $logfile
@@ -153,19 +162,19 @@ for ((i=1; i<=$num_inputs; i++))
         #make new wallet + address and send $i outputs to it
         send_wallet=SENDWALLET-i$i-o$o-$now.dat
         echo -e "\n"$send_wallet >> $logfile
-        echo ./devault-cli -regtest createwallet $send_wallet >> $logfile
-        ./devault-cli -regtest createwallet $send_wallet >> $logfile
-        send_address=$(./devault-cli -regtest -rpcwallet=$send_wallet getnewaddress)
+        echo ./devault-cli -$testnet_cli_flag createwallet $send_wallet >> $logfile
+        ./devault-cli -$testnet_cli_flag createwallet $send_wallet >> $logfile
+        send_address=$(./devault-cli -$testnet_cli_flag -rpcwallet=$send_wallet getnewaddress)
         echo send_address $send_address >> $logfile
 
         # send amount of inputs to send_address
         for ii in $(seq 1 $i);
         do
-          echo $amount \+ $fee \*$o \/$i = >> $logfile
-          amount_input=$(( ( ($amount+$fee)*$o/$i ) + 1))
-          echo $amount_input >> $logfile
-          send_string="./devault-cli -regtest -rpcwallet=wallet.dat sendtoaddress $send_address $amount_input"
-          echo $send_string >> $logfile
+          echo $amount \+ $fee \*$o \/$i + 1= >> $logfile
+          amount_input=$(( ( ($amount+$fee)*$o/$i ) + 1)) # add one in case of uneven nums
+#          echo $amount_input >> $logfile
+          send_string="./devault-cli -$testnet_cli_flag -rpcwallet=wallet.dat sendtoaddress $send_address $amount_input"
+#          echo $send_string >> $logfile
           $send_string > /dev/null
         done;
 
@@ -173,24 +182,26 @@ for ((i=1; i<=$num_inputs; i++))
         # generate blocks to make tx spendable
         until [ "${is_spendable: -4}" = "true" ];
         do
-          ./devault-cli -regtest -rpcwallet=wallet.dat generate 1  > /dev/null
+          ./devault-cli -$testnet_cli_flag -rpcwallet=wallet.dat generate 1  > /dev/null
           sleep $wait_for_gen
           #check if spendable
-          unspent=$(./devault-cli -regtest -rpcwallet=$send_wallet listunspent)
+          unspent=$(./devault-cli -$testnet_cli_flag -rpcwallet=$send_wallet listunspent)
           is_spendable=$( echo $unspent | jq ".[].spendable" )
         done;
 
         # outputs balance and wallet info to see if spendable
-        echo send_wallet balance >> $logfile
-        ./devault-cli -regtest -rpcwallet=$send_wallet  getbalance  >> $logfile
-        ./devault-cli -regtest -rpcwallet=$send_wallet  listunspent >> $logfile
+        echo $send_wallet balance >> $logfile
+        ./devault-cli -$testnet_cli_flag -rpcwallet=$send_wallet  getbalance  >> $logfile
+        ./devault-cli -$testnet_cli_flag -rpcwallet=$send_wallet  listunspent >> $logfile
 
         # make list of output addresses needed
         echo send amount:$amount from $i inputs to $o outputs >> $logfile
         outputs=""
+        fileItemArray=[] 
+
         for oo in $(seq 1 $o);
           do
-            output_address_string='./devault-cli -regtest -rpcwallet=receiving_wallet.dat getnewaddress'
+            output_address_string='./devault-cli -'$testnet_cli_flag' -rpcwallet=receiving_wallet.dat getnewaddress'
             output_address=$(eval $output_address_string)
             echo 'outputs_address #'$oo ' is  '$output_address  >> $logfile
             outputs+='\"'$output_address'\":'$amount','
@@ -198,24 +209,24 @@ for ((i=1; i<=$num_inputs; i++))
         outputs='"{'${outputs::-1}'}"';
 
         # load send_wallet and sendmany to $o outputs
-        sendmany_string='./devault-cli -regtest -rpcwallet='$send_wallet' sendmany "" '$outputs
+        sendmany_string='./devault-cli -$testnet_cli_flag -rpcwallet='$send_wallet' sendmany "" '$outputs
         echo $sendmany_string >> $logfile
         tx=$( eval $sendmany_string )
 
       # generate blocks to make tx spendable
       until [ "${is_spendable: -4}" = "true" ];
         do
-          ./devault-cli -regtest -rpcwallet=wallet.dat generate 1  > /dev/null
+          ./devault-cli -$testnet_cli_flag -rpcwallet=wallet.dat generate 1  > /dev/null
           sleep $wait_for_gen
           #check if spendable
-          unspent=$(./devault-cli -regtest -rpcwallet=$send_wallet listunspent)
+          unspent=$(./devault-cli -$testnet_cli_flag -rpcwallet=$send_wallet listunspent)
           is_spendable=$( echo $unspent | jq ".[].spendable" )
         done;
 
         # output tx info
-        tx_info=$(eval './devault-cli -regtest -rpcwallet=receiving_wallet.dat gettransaction '$tx)
+        tx_info=$(eval './devault-cli -'$testnet_cli_flag' -rpcwallet=receiving_wallet.dat gettransaction '$tx)
         hex=$(echo $tx_info | jq ".hex")
-        tx_info=$(eval './devault-cli -regtest decoderawtransaction '$hex)
+        tx_info=$(eval './devault-cli -'$testnet_cli_flag' decoderawtransaction '$hex)
         echo hex: $hex >> $logfile
 #        num_vin=$(echo $tx_info | jq '.vin | length')
 #        num_vout=$(echo $tx_info | jq '.vout | length')
@@ -234,16 +245,16 @@ do
   echo -ne "Test #$x: Stress test with $num_of_stress_txs of $amount_stress DVT TXs\033[0K\r"
   for i in $(seq 1 $num_of_stress_txs);
     do
-      send_string="./devault-cli -regtest -rpcwallet=wallet.dat sendtoaddress $send_address $amount_stress"
+      send_string="./devault-cli -$testnet_cli_flag -rpcwallet=wallet.dat sendtoaddress $send_address $amount_stress"
       #echo $send_string >> $logfile
       #$send_string  >> $logfile
   done;
     until [ "${is_spendable: -4}" = "true" ];
     do
-      ./devault-cli -regtest -rpcwallet=wallet.dat generate 1  > /dev/null
+      ./devault-cli -$testnet_cli_flag -rpcwallet=wallet.dat generate 1  > /dev/null
       sleep $wait_for_gen
       #check if spendable
-      unspent=$(./devault-cli -regtest -rpcwallet=$send_wallet listunspent)
+      unspent=$(./devault-cli -$testnet_cli_flag -rpcwallet=$send_wallet listunspent)
       echo $unspent >> $logfile
       is_spendable=$( echo $unspent | jq ".[].spendable" )
       echo $is_spendable >> $logfile
@@ -253,16 +264,16 @@ do
 
 
 # empty receiving_wallet, stop, cleanup and end script
-#receiving_wallet_balance=$(./devault-cli -regtest -rpcwallet=receiving_wallet.dat getbalance)
+#receiving_wallet_balance=$(./devault-cli -$testnet_cli_flag -rpcwallet=receiving_wallet.dat getbalance)
 #receiving_wallet_balance=${receiving_wallet_balance%.*}
 #receiving_wallet_balance=$(($receiving_wallet_balance-$fee))
-#base_wallet_address=$(./devault-cli -regtest -rpcwallet=wallet.dat getnewaddress)
-#send_string="./devault-cli -regtest -rpcwallet=receiving_wallet.dat sendtoaddress $base_wallet_address $receiving_wallet_balance "" "" true"
+#base_wallet_address=$(./devault-cli -$testnet_cli_flag -rpcwallet=wallet.dat getnewaddress)
+#send_string="./devault-cli -$testnet_cli_flag -rpcwallet=receiving_wallet.dat sendtoaddress $base_wallet_address $receiving_wallet_balance "" "" true"
 #$send_string >> $logfile
 
 echo -en "Stop daemon\033[0K\r"
-./devault-cli -regtest stop >> $logfile
-rm '/home/'$USER'/.devault/'$testnet_name'/wallets/SEND'*
+./devault-cli -$testnet_cli_flag stop >> $logfile
+rm '/home/'$USER'/.devault/'$testnet_dir_name'/wallets/SEND'*
 end_time=$(date +"%Y-%m-%d-%H:%M:%S")
 echo start time: $now, end time: $end_time >> $logfile
 duration=$SECONDS
